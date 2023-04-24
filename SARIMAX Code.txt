@@ -1,0 +1,53 @@
+#Import all the necessary libraries 
+!pip install pmdarima
+import numpy as np #Used for numpy arrays
+import pandas as pd #Used to utilize the pandas dataframe 
+from statsmodels.tsa.stattools import adfuller #Helps us perform the Dickey fuller test
+from pmdarima import auto_arima #This library helpds us decide the parameter (order) for our ARIMA/SARIMAX models
+import statsmodels.api as sm # Import the SARIMAX Model
+from pandas.tseries.offsets import DateOffset
+
+dataframe=pd.read_csv('dataset.csv') # Read the dataset 
+dataframe.head() #Display the first few values
+dataframe.columns=["Months","Sales"] #Rename the columns for better understanding
+df = dataframef[dataframe['Sales'].notna()] #Remove the Null values from the column 'Sales' in the dataset
+df.head() #Display the first few values
+
+df['Months']=pd.to_datetime(df['Months']) #Convert to datetime format
+df.head() #Display few values of the dataset
+
+df.set_index('Months', inplace=True)
+
+df.plot() #Displays the seasonality for every year
+
+#Ho: It is non stationary
+#H1: It is stationary
+#If the P value is lesser that 0.05, the Null hypothesis is rejected and vice versa
+dftest = adfuller(df['Sales', autolag = 'AIC') #Perform the Dickey Fuller test 
+print("1. ADF : ",dftest[0])
+print("2. P-Value : ", dftest[1])
+print("3. Num Of Lags : ", dftest[2])
+print("4. Num Of Observations Used For ADF Regression:",dftest[3])
+print("5. Critical Values :")
+for key, val in dftest[4].items():
+    print("\t",key, ": ", val)
+
+df["Seasonal_Shift"]=df["Sales"].shift(12) #Create a new column Seasonal Shift and fill it with values that are shifted by 12 months verticially.
+df["Difference"]=df["Sales"]-df["Seasonal_Shift"] #Add a new column "Difference to display the difference between Sales(Original) and the Seasonal_Shift(Shifted) values 
+new_df = df[df['Difference'].notna()] #Drop the na values 
+new_df['Difference'].plot() #Plot the difference
+
+
+Values= auto_arima(new_df['Difference'], trace=True) #Find out the best  values for p,d and q through auto_arima
+Values.summary()#Get a summary for it
+
+model=sm.tsa.statespace.SARIMAX(new_df['Sales'],order=(1, 0, 0),seasonal_order=(1,0,0,12)) #Fit the model into SARIMAX witht he order 1,0,0
+results=model.fit()
+df['forecast']=results.predict(start=70,end=103,dynamic=True) #Predicted values
+df[['Sales','forecast']].plot(figsize=(12,8))#Plot the Sales Value
+
+date=[df.index[-1]+ DateOffset(months=x)for x in range(0,24)] 
+dataframe=pd.DataFrame(index=date[1:],columns=df.columns)
+future_df=pd.concat([new_df,dataframe])
+future_df['forecast'] = results.predict(start = 104, end = 120, dynamic= True)  
+future_df[['Sales', 'forecast']].plot(figsize=(12, 8))
